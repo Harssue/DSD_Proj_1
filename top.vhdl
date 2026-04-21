@@ -17,66 +17,48 @@ end top_video_freeze;
 
 architecture Behavioral of top_video_freeze is
 
-    signal clk25       : STD_LOGIC := '0';
-    signal freeze      : STD_LOGIC := '0';
-    signal frame_index : INTEGER range 0 to 9 := 0;
-
-    signal pixel       : STD_LOGIC_VECTOR(7 downto 0);
-    signal addr        : INTEGER range 0 to 19199;
+    signal clk25         : STD_LOGIC := '0';
+    signal pixel         : STD_LOGIC_VECTOR(7 downto 0);
+    signal vga_addr      : INTEGER range 0 to 19199;  -- ✅ DECLARED HERE
+    signal bram_addr_sig : STD_LOGIC_VECTOR(17 downto 0);
 
 begin
 
--- Clock Divider (100 MHz → 25 MHz)
-process(CLK100MHZ)
-begin
-    if rising_edge(CLK100MHZ) then
-        clk25 <= not clk25;
-    end if;
-end process;
-
--- Freeze Toggle
-process(clk25)
-begin
-    if rising_edge(clk25) then
-        if BTNC = '1' then
-            freeze <= not freeze;
+    -- Clock Divider (100 MHz → 25 MHz)
+    process(CLK100MHZ)
+    begin
+        if rising_edge(CLK100MHZ) then
+            clk25 <= not clk25;
         end if;
-    end if;
-end process;
+    end process;
 
--- Frame Counter
-process(clk25)
-begin
-    if rising_edge(clk25) then
-        if freeze = '0' then
-            if frame_index = 9 then
-                frame_index <= 0;
-            else
-                frame_index <= frame_index + 1;
-            end if;
-        end if;
-    end if;
-end process;
+    -- Frame ROM - Fixed port connections
+    frame_ctrl: entity work.frame_controller
+        port map (
+            clk        => clk25,
+            freeze_btn => BTNC,
+            pixel_addr => vga_addr,      -- ✅ Now declared
+            bram_addr  => bram_addr_sig
+        );
+   
+    frame_mem: entity work.blk_mem_gen_0
+        port map (
+            clka  => clk25,              -- ✅ Fixed: clk25 instead of clk
+            addra => bram_addr_sig,
+            douta => pixel
+        );
 
--- Frame ROM
-frame_mem: entity work.frame_rom
-    port map (
-        clk   => clk25,
-        addr  => frame_index * 19200 + addr,
-        data  => pixel
-    );
-
--- VGA
-vga: entity work.vga_controller
-    port map (
-        clk       => clk25,
-        pixel_in  => pixel,
-        addr_out  => addr,
-        hsync     => VGA_HS,
-        vsync     => VGA_VS,
-        r         => VGA_R,
-        g         => VGA_G,
-        b         => VGA_B
-    );
+    -- VGA Controller
+    vga: entity work.vga_controller
+        port map (
+            clk       => clk25,
+            pixel_in  => pixel,
+            addr_out  => vga_addr,       -- ✅ Now properly connected
+            hsync     => VGA_HS,
+            vsync     => VGA_VS,
+            r         => VGA_R,
+            g         => VGA_G,
+            b         => VGA_B
+        );
 
 end Behavioral;
